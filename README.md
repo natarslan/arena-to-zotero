@@ -2,29 +2,20 @@
 
 Export your [Are.na](https://www.are.na) channels into a [Zotero](https://www.zotero.org) library.
 
-## What it creates
+Each Are.na channel becomes a sub-collection in Zotero, and each block (link, image, text, attachment) becomes an item inside it — all nested under a top-level **Arena** collection.
 
 ```
 Zotero Library
-└── Arena                    ← top-level collection (created automatically)
-    ├── My Channel           ← one sub-collection per Are.na channel
-    │   ├── Some Link        ← webpage item
-    │   ├── An Image         ← artwork item
-    │   └── A Note           ← note item
-    └── Another Channel
+└── Arena
+    ├── Research               ← Are.na channel
+    │   ├── Some article       ← link block → Webpage item
+    │   ├── A diagram          ← image block → Artwork item
+    │   └── A quick note       ← text block  → Note item
+    └── Inspiration
         └── …
 ```
 
-Are.na block types map to Zotero item types:
-
-| Are.na block | Zotero type  |
-|--------------|--------------|
-| Link         | Webpage      |
-| Image        | Artwork      |
-| Text         | Note         |
-| Media        | Webpage      |
-| Attachment   | Document     |
-| Channel      | Webpage      |
+---
 
 ## Setup
 
@@ -34,53 +25,101 @@ Are.na block types map to Zotero item types:
 pip install -r requirements.txt
 ```
 
-### 2. Configure credentials
+### 2. Get your credentials
+
+**Are.na access token**
+1. Go to [dev.are.na/oauth/applications](https://dev.are.na/oauth/applications)
+2. Create a new application (name it anything)
+3. Copy the **Personal Access Token**
+
+**Zotero API key and library ID**
+1. Go to [zotero.org/settings/keys](https://www.zotero.org/settings/keys)
+2. Click *Create new private key*
+3. Give it **read/write** access to your personal library
+4. Your **library ID** is the number in your Zotero profile URL:
+   `zotero.org/users/1234567` → library ID is `1234567`
+
+### 3. Create your `.env` file
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env`:
+Open `.env` and fill in:
 
 ```
-ARENA_ACCESS_TOKEN=...   # from https://dev.are.na/oauth/applications
-ZOTERO_API_KEY=...       # from https://www.zotero.org/settings/keys
-ZOTERO_LIBRARY_ID=...    # your numeric user ID (in your profile URL)
-ZOTERO_LIBRARY_TYPE=user # "user" or "group"
+ARENA_ACCESS_TOKEN=your_arena_token_here
+ZOTERO_API_KEY=your_zotero_key_here
+ZOTERO_LIBRARY_ID=1234567
+ZOTERO_LIBRARY_TYPE=user
 ```
 
-**Are.na token**: Go to [https://dev.are.na/oauth/applications](https://dev.are.na/oauth/applications), create an application, then generate a personal access token.
+---
 
-**Zotero API key**: Go to [https://www.zotero.org/settings/keys](https://www.zotero.org/settings/keys) and create a key with read/write access to your library. Your library ID is the number in your Zotero profile URL (`zotero.org/users/<ID>`).
+## Usage
 
-### 3. Run
+### Import all your channels
+
+Imports every channel you own into Zotero. Each channel becomes a sub-collection under **Arena**.
 
 ```bash
-# Import everything from all your channels
 python main.py
-
-# Import specific channels by slug
-python main.py my-channel-slug another-channel
-
-# Interactive mode: browse blocks per channel and pick which to import
-python main.py -i
-
-# Interactive mode for a specific channel
-python main.py -i my-channel-slug
-
-# Only import certain block types (no prompt)
-python main.py --type Link,Image
-
-# Combine: interactive picker, but only show links
-python main.py -i --type Link my-channel-slug
 ```
 
-The channel slug is the last part of the Are.na URL:  
-`https://www.are.na/username/my-channel-slug` → slug is `my-channel-slug`
+---
 
-### Interactive picker
+### Import specific channels
 
-When `-i` / `--interactive` is used, each channel shows a paged list of blocks:
+Pass one or more channel slugs to only import those channels.
+
+```bash
+python main.py research-links
+python main.py research-links my-inspiration visual-references
+```
+
+The **slug** is the last part of the channel URL:
+`https://www.are.na/yourname/research-links` → slug is `research-links`
+
+---
+
+### Filter by block type
+
+Use `--type` to only import certain kinds of blocks. Useful if you only want links, or only images, without everything else.
+
+```bash
+python main.py --type Link
+python main.py --type Link,Image
+python main.py --type Text,Attachment
+```
+
+| Type value   | What it imports                     |
+|--------------|-------------------------------------|
+| `Link`       | Web page links                      |
+| `Image`      | Images (uploaded or embedded)       |
+| `Text`       | Plain text / markdown notes         |
+| `Media`      | Videos, audio embeds                |
+| `Attachment` | File uploads (PDF, doc, etc.)       |
+| `Channel`    | Connected channels (links to them)  |
+
+You can also combine `--type` with specific channels:
+
+```bash
+python main.py --type Link research-links
+```
+
+---
+
+### Interactive mode — pick blocks yourself
+
+Use `-i` to browse each channel's blocks before importing and select only the ones you want.
+
+```bash
+python main.py -i
+python main.py -i research-links
+python main.py -i --type Link research-links
+```
+
+You'll see a paged list like this:
 
 ```
 ────────────────────────────────────────────────────────────
@@ -90,37 +129,66 @@ When `-i` / `--interactive` is used, each channel shows a paged list of blocks:
 
   Blocks 1–20 of 42  (page 1/3)
   #     Type  Title
-  ────  ─────  ──────────────────────────────────────────────────
-     1  [LNK]  Some interesting article
-     2  [IMG]  Diagram of a thing                           ✓
-     3  [TXT]  Quick note to self
+  ────  ─────  ──────────────────────────────────────────
+     1  [LNK]  How the internet works
+     2  [IMG]  Diagram sketch                          ✓
+     3  [TXT]  Note to self
+     4  [LNK]  Another article
     ...
 
   Currently selected: 0 new block(s)
-  Navigation: n=next, a=select all, c=clear, d=done, s=skip channel
+  Navigation: n=next, p=prev, a=select all, c=clear, d=done, s=skip channel
   Enter numbers to toggle (e.g. 1,3,5-8  or  all  or  none):
-  > 1,3,7-10
+  > _
 ```
 
-- Type numbers, ranges (`5-8`), or `all` / `none`
-- Selecting a number again **deselects** it
-- Blocks marked `✓` are already in Zotero and will be skipped regardless
-- `d` / Enter with no input → confirm and move to next channel
-- `s` → skip this channel entirely
+**How selection works:**
 
-### Block types for `--type`
+| Input      | What it does                              |
+|------------|-------------------------------------------|
+| `1,3,5`    | Select blocks 1, 3, and 5                 |
+| `5-10`     | Select blocks 5 through 10               |
+| `1,3,7-10` | Mix of individual numbers and ranges      |
+| `all`      | Select every block on the current page    |
+| `none`     | Deselect everything                       |
+| A number already selected | Deselects it (toggle)   |
+| `n`        | Next page                                 |
+| `p`        | Previous page                             |
+| `d` or Enter | Confirm selection and move on           |
+| `s`        | Skip this channel entirely               |
 
-| Value        | Are.na block type         |
-|--------------|--------------------------|
-| `Link`       | Web page / URL           |
-| `Image`      | Image upload or embed    |
-| `Text`       | Plain text / markdown    |
-| `Media`      | Video, audio embed       |
-| `Attachment` | File upload              |
-| `Channel`    | Connected channel        |
+Blocks marked `✓` are already in Zotero — they'll be skipped regardless of whether you select them.
 
-## Notes
+---
 
-- Re-running is safe — blocks already in Zotero are skipped (tracked via Are.na block ID in the item's `extra` field).
-- Zotero allows up to 50 items per API call; large channels are batched automatically.
-- Are.na API rate limits are respected with small delays between requests.
+## Common combinations
+
+| Goal | Command |
+|------|---------|
+| Import everything | `python main.py` |
+| Import one channel | `python main.py my-channel` |
+| Import two channels | `python main.py channel-one channel-two` |
+| Only import links from all channels | `python main.py --type Link` |
+| Only import links from one channel | `python main.py --type Link my-channel` |
+| Choose blocks yourself, all channels | `python main.py -i` |
+| Choose blocks yourself, one channel | `python main.py -i my-channel` |
+| Choose from links only, one channel | `python main.py -i --type Link my-channel` |
+
+---
+
+## Re-running safely
+
+You can run the script as many times as you like. Blocks already imported into Zotero are automatically skipped — their Are.na block ID is stored in each Zotero item's `extra` field and checked on every run.
+
+---
+
+## How blocks map to Zotero item types
+
+| Are.na block | Zotero item type |
+|--------------|-----------------|
+| Link         | Webpage         |
+| Image        | Artwork         |
+| Text         | Note            |
+| Media        | Webpage         |
+| Attachment   | Document        |
+| Channel      | Webpage         |
