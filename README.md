@@ -55,21 +55,72 @@ ZOTERO_LIBRARY_TYPE=user # "user" or "group"
 
 ### 3. Run
 
-Sync all your channels:
 ```bash
+# Import everything from all your channels
 python main.py
-```
 
-Sync specific channels by slug:
-```bash
+# Import specific channels by slug
 python main.py my-channel-slug another-channel
+
+# Interactive mode: browse blocks per channel and pick which to import
+python main.py -i
+
+# Interactive mode for a specific channel
+python main.py -i my-channel-slug
+
+# Only import certain block types (no prompt)
+python main.py --type Link,Image
+
+# Combine: interactive picker, but only show links
+python main.py -i --type Link my-channel-slug
 ```
 
 The channel slug is the last part of the Are.na URL:  
 `https://www.are.na/username/my-channel-slug` → slug is `my-channel-slug`
 
+### Interactive picker
+
+When `-i` / `--interactive` is used, each channel shows a paged list of blocks:
+
+```
+────────────────────────────────────────────────────────────
+  Channel: Research  (42 blocks)
+  ✓ = already in Zotero (will be skipped even if selected)
+────────────────────────────────────────────────────────────
+
+  Blocks 1–20 of 42  (page 1/3)
+  #     Type  Title
+  ────  ─────  ──────────────────────────────────────────────────
+     1  [LNK]  Some interesting article
+     2  [IMG]  Diagram of a thing                           ✓
+     3  [TXT]  Quick note to self
+    ...
+
+  Currently selected: 0 new block(s)
+  Navigation: n=next, a=select all, c=clear, d=done, s=skip channel
+  Enter numbers to toggle (e.g. 1,3,5-8  or  all  or  none):
+  > 1,3,7-10
+```
+
+- Type numbers, ranges (`5-8`), or `all` / `none`
+- Selecting a number again **deselects** it
+- Blocks marked `✓` are already in Zotero and will be skipped regardless
+- `d` / Enter with no input → confirm and move to next channel
+- `s` → skip this channel entirely
+
+### Block types for `--type`
+
+| Value        | Are.na block type         |
+|--------------|--------------------------|
+| `Link`       | Web page / URL           |
+| `Image`      | Image upload or embed    |
+| `Text`       | Plain text / markdown    |
+| `Media`      | Video, audio embed       |
+| `Attachment` | File upload              |
+| `Channel`    | Connected channel        |
+
 ## Notes
 
-- Re-running the script is safe — it skips blocks already in Zotero (tracked via Are.na block ID stored in the item's `extra` field).
+- Re-running is safe — blocks already in Zotero are skipped (tracked via Are.na block ID in the item's `extra` field).
 - Zotero allows up to 50 items per API call; large channels are batched automatically.
 - Are.na API rate limits are respected with small delays between requests.

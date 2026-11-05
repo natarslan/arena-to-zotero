@@ -12,6 +12,7 @@ import time
 from arena_client import ArenaClient
 from zotero_client import ZoteroClient
 from mapper import block_to_zotero_item, channel_to_collection_name
+from selector import select_blocks_interactive, filter_blocks_by_type
 
 ARENA_ROOT_COLLECTION = "Arena"
 ZOTERO_ITEM_BATCH = 50  # Zotero API max per request
@@ -26,6 +27,8 @@ def sync(
     arena: ArenaClient,
     zotero: ZoteroClient,
     channel_slugs: list[str] | None = None,
+    interactive: bool = False,
+    filter_types: list[str] | None = None,
     verbose: bool = True,
 ) -> None:
     """
@@ -34,8 +37,11 @@ def sync(
     Args:
         arena:          Configured ArenaClient.
         zotero:         Configured ZoteroClient.
-        channel_slugs:  Optional list of specific channel slugs to sync.
-                        If None, syncs all channels for the authenticated user.
+        channel_slugs:  Specific channel slugs to sync; None → all channels.
+        interactive:    If True, show a picker for each channel so you can
+                        choose which blocks to import.
+        filter_types:   Only import blocks of these types, e.g. ["Link", "Image"].
+                        Valid values: Image, Link, Text, Media, Attachment, Channel.
         verbose:        Print progress to stdout.
     """
     log = print if verbose else lambda *a, **k: None
@@ -73,13 +79,13 @@ def sync(
     for channel in channels:
         slug = channel.get("slug") or str(channel.get("id"))
         col_name = channel_to_collection_name(channel)
-        log(f'\nSyncing channel "{col_name}" ({slug})…')
+        log(f'\nChannel: "{col_name}" ({slug})')
 
         # Create sub-collection under Arena
         sub_col = zotero.get_or_create_collection(col_name, parent_key=arena_col_key)
         sub_col_key = sub_col["data"]["key"] if "data" in sub_col else sub_col.get("key")
 
-        # Fetch existing items in this sub-collection (to avoid duplicates)
+        # Fetch existing items to avoid duplicates
         existing_items = zotero.get_collection_items(sub_col_key)
         existing_arena_ids = set()
         for item in existing_items:
@@ -89,24 +95,38 @@ def sync(
                     existing_arena_ids.add(line.split(":", 1)[1].strip())
 
         # Fetch blocks from Are.na
-        blocks = arena.get_channel_blocks(slug)
-        log(f"  {len(blocks)} block(s) found, {len(existing_arena_ids)} already in Zotero.")
+        log(f"  Fetching blocks…")
+        all_blocks = arena.get_channel_blocks(slug)
+        log(f"  {len(all_blocks)} block(s) found, {len(existing_arena_ids)} already in Zotero.")
 
-        new_blocks = [
-            b for b in blocks
-            if str(b.get("id")) not in existing_arena_ids
-        ]
-        log(f"  {len(new_blocks)} new block(s) to import.")
+        # Strip already-imported blocks
+        new_blocks = [b for b in all_blocks if str(b.get("id")) not in existing_arena_ids]
+
+        # Apply type filter if requested
+        if filter_types:
+            before = len(new_blocks)
+            new_blocks = filter_blocks_by_type(new_blocks, filter_types)
+            log(f"  After type filter ({', '.join(filter_types)}): {len(new_blocks)} of {before} block(s).")
 
         if not new_blocks:
+            log("  Nothing new to import.")
             continue
+
+        # Interactive picker
+        if interactive:
+            new_blocks = select_blocks_interactive(
+                new_blocks, col_name, existing_arena_ids
+            )
+            if not new_blocks:
+                log("  Skipped.")
+                continue
+            log(f"  {len(new_blocks)} block(s) selected.")
 
         # Build Zotero item payloads and push in batches
         items_payload = []
         for block in new_blocks:
             try:
-                item = block_to_zotero_item(block, sub_col_key)
-                items_payload.append(item)
+                items_payload.append(block_to_zotero_item(block, sub_col_key))
             except Exception as exc:
                 log(f"  Warning: skipping block {block.get('id')}: {exc}")
 
@@ -124,6 +144,6 @@ def sync(
                 failed += len(batch)
             time.sleep(0.5)
 
-        log(f"  Created {created} item(s), {failed} failed.")
+        log(f"  Created {created} item(s)" + (f", {failed} failed." if failed else "."))
 
     log("\nSync complete.")
